@@ -1,0 +1,55 @@
+version: '3'
+
+services:
+  bot:
+    build: 
+      context: bot
+      dockerfile: Dockerfile
+    depends_on:
+      - postgres
+    links:
+      - postgres
+    env_file:
+      - .env
+  digest:
+    build: 
+      context: digest
+      dockerfile: Dockerfile
+    depends_on:
+      - postgres
+    links:
+      - postgres
+    env_file:
+      - .env
+  discord:
+    build: 
+      context: discord
+      dockerfile: Dockerfile
+    depends_on:
+      - postgres
+    links:
+      - postgres
+    env_file:
+      - .env
+  telegram:
+    build: 
+      context: telegram
+      dockerfile: Dockerfile
+    stdin_open: true
+    depends_on:
+      - postgres
+    links:
+      - postgres
+    env_file:
+      - .env
+  postgres:
+    build: 
+      context: postgres
+      dockerfile: Dockerfile
+    volumes:
+      - postgres:/var/lib/postgresql
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    env_file:
+      - .env
+volumes:
+  postgres: {}
