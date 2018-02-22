@@ -1,3 +1,4 @@
+#
 import psycopg2,psycopg2.extras,json, os,datetime,urllib.request
 
 def get_timestamp(hour,minute,second,microsecond=0):
@@ -31,7 +32,9 @@ def save_user(u):
 def save_msg(r):
 	with psycopg2.connect(os.environ['DB']) as con:
 		c = con.cursor()
-		c.execute('''INSERT INTO msgs VALUES (%(id)s, %(uid)s, %(eid)s, %(msg)s)''', r)
+		c.execute('''INSERT INTO msgs VALUES (%(id)s, %(uid)s, %(eid)s, %(msg)s)
+		ON CONFLICT(uid,eid) DO UPDATE SET id = excluded.id, msg=excluded.msg
+		''', r)
 
 def read_events():
 	with psycopg2.connect(os.environ['DB']) as con:
@@ -52,14 +55,31 @@ def close_raw_event(e):
 		c = con.cursor()
 		c.execute('DELETE FROM raw WHERE ctid=%s',(e['ctid'],))
 
-def pool_resolve_addr():
+def clean():
 	with psycopg2.connect(os.environ['DB']) as con:
 		c = con.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
-		c.execute("""SELECT concat_ws(',',evt->>'latitude',evt->>'longitude') latlng FROM events LEFT JOIN addrs ON (latlng=concat_ws(',',evt->>'latitude',evt->>'longitude'))WHERE adr IS NULL ORDER BY evt->>'end' DESC LIMIT 1;""")
-		for r in c:
-			with urllib.request.urlopen("https://maps.googleapis.com/maps/api/geocode/json?latlng=%(latlng)s" % r ) as url:
-				data = json.loads(url.read().decode())
-				if ('results' in data) and len(data['results'])>0:
-					r['addr']=data['results'][0]['formatted_address']
-					con.cursor().execute('INSERT INTO addrs VALUES(%(latlng)s, %(addr)s)',r)
+		if clean.cooldown:
+			clean.cooldown = clean.cooldown - 1
+		else:
+			c.execute("""SELECT latlng(evt) FROM events LEFT JOIN addrs ON latlng=latlng(evt) WHERE adr IS NULL ORDER BY evt->>'end' DESC LIMIT 1;""")
+			for r in c:
+				with urllib.request.urlopen("https://maps.googleapis.com/maps/api/geocode/json?latlng=%(latlng)s" % r ) as url:
+					data = json.loads(url.read().decode())
+					if ('results' in data) and len(data['results'])>0:
+						r['addr']=data['results'][0]['formatted_address']
+						con.cursor().execute('INSERT INTO addrs VALUES(%(latlng)s, %(addr)s)',r)
+					else:
+						clean.cooldown = 1200
+		c.execute('''WITH d AS (DELETE FROM events WHERE id < extract(epoch from now())::text RETURNING *) INSERT INTO events_history SELECT * FROM d;''')
+		if c.rowcount:
+			print('cleared %d events' % (c.rowcount,))
+		c.execute('''WITH d AS (DELETE FROM msgs WHERE eid < extract(epoch from now())::text RETURNING *) INSERT INTO msgs_history SELECT * FROM d;''')
+		if c.rowcount:
+			print('cleared %d msgs' % (c.rowcount,))
+		
+clean.cooldown = 0
 
+def close_raw_event(e):
+	with psycopg2.connect(os.environ['DB']) as con:
+		c = con.cursor()
+		c.execute('DELETE FROM raw WHERE ctid=%s',(e['ctid'],))

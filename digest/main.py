@@ -1,32 +1,30 @@
-import utils, re, time
-
-pt = re.compile('ate (\d\d):(\d\d):(\d\d)')
-pc = re.compile('http://maps.google.com/maps.q=([-.0-9]+),([-.0-9]+)')
-pb = re.compile('Um (.+) selvagem')
-pr = re.compile('raide de (.+)!')
+import utils, re, time, code
+pats = [
+	(re.compile('ate (?P<hour>\d\d):(?P<minute>\d\d):(?P<second>\d\d)'),True),
+	(re.compile('http://maps.google.com/maps.q=(?P<latitude>[-.0-9]+),(?P<longitude>[-.0-9]+)'),True),
+	(re.compile('^Um (?P<name>.+) selvagem'),False),
+	(re.compile('^Detectada raid de (?P<raid>.+)!'),False)]
 
 while True:
 	for e in utils.read_raw_events():
 		if 'text' in e['evt']:
-			m = e['evt']['text']
-			t = pt.search(m)
-			c = pc.search(m)
-			if t and c:
-				b = pb.search(m)
-				if b:
-					utils.save_event({
-						'end':utils.get_timestamp(int(t[1]),int(t[2]),int(t[3])),
-						'latitude':c[1], 'longitude':c[2],
-						'tags':[b[1],'WILD'], 'bte': e
-						})
+			t = e['evt']['text']
+			evt = {'btg':e['evt']}
+			for p, c in pats:
+				m = p.search(t)
+				if m:
+					evt.update(m.groupdict())
+				elif c:
+					break
+			else:
+				if ('name' in evt) or ('raid' in evt):
+					evt.update({
+						'end':utils.get_timestamp(int(evt['hour']),int(evt['minute']),int(evt['second'])),
+						'tags':[evt['name'] if 'name' in evt else evt['raid'].upper()]
+					})
+					utils.save_event(evt)
 				else:
-					r = pr.search(m)
-					if r:
-						utils.save_event({
-							'end':utils.get_timestamp(int(t[1]),int(t[2]),int(t[3])),
-							'latitude':c[1], 'longitude':c[2],
-							'tags':[r[1].upper(),'RAID'], 'bte': e
-							})
+					print('failed msg'+t)
 		utils.close_raw_event(e)
-	utils.pool_resolve_addr()
-	time.sleep(3)
+	utils.clean()
+	time.sleep(2)
