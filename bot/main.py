@@ -1,5 +1,8 @@
 import telegram, time, os, code, re, json, psycopg2,utils
 
+with open('/root/.telegram-cli/id') as f:
+	myid = int(f.readline())
+
 pc = re.compile('^/?([^_]*?)_?([0-9]*)$')
 def on_message(m):
 	u = utils.load_user(m.from_user.to_dict())
@@ -19,7 +22,6 @@ def on_message(m):
 			utils.save_user(u)
 			m.reply_text('Filtro atualizado')
 		return
-	
 
 import code
 def on_event(e):
@@ -30,8 +32,8 @@ def on_event(e):
 		b.sendLocation(chat_id=e['uid'],latitude=e['lat'],longitude=e['lng'],disable_notification=True).message_id
 	utils.save_msg(e)
 	
-b = telegram.Bot(os.environ['TT'])
-b.send_message(chat_id=int(os.environ['EU']),text='starting')
+b = telegram.Bot(os.environ['TELEGRAM_TOKEN'])
+b.send_message(chat_id=myid,text='starting')
 o = None
 while True:
 	try:

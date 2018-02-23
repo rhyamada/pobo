@@ -7,7 +7,6 @@ lua5.2 liblua5.2-dev lua-sql-postgres lua-cjson
 RUN git clone --recursive https://github.com/vysheng/tg.git
 WORKDIR /tg
 RUN ./configure && make
-ADD .telegram-cli /root/.telegram-cli
 ADD *.lua /
 CMD ["bin/telegram-cli","-s","/bot.lua"]
 

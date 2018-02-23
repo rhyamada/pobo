@@ -61,7 +61,7 @@ def clean():
 		if clean.cooldown:
 			clean.cooldown = clean.cooldown - 1
 		else:
-			c.execute("""SELECT latlng(evt) FROM events LEFT JOIN addrs ON latlng=latlng(evt) WHERE adr IS NULL ORDER BY evt->>'end' DESC LIMIT 1;""")
+			c.execute("""SELECT latlng(evt) FROM events JOIN msgs ON eid=events.id LEFT JOIN addrs ON latlng=latlng(evt) WHERE adr IS NULL ORDER BY evt->>'end' DESC LIMIT 1""")
 			for r in c:
 				with urllib.request.urlopen("https://maps.googleapis.com/maps/api/geocode/json?latlng=%(latlng)s" % r ) as url:
 					data = json.loads(url.read().decode())
