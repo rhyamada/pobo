@@ -38,7 +38,7 @@ RETURN concat_ws(chr(10),
     adr,
     'https://maps.google.com?q='||(e->>'latitude')||','||(e->>'longitude'),
     '_Ate:_ *'||to_char(t,'HH24:MI:SS') || ' (' || (i/60) || 'min)*',
-	'desative com /'||(e->'tags'->>0)||'_0'
+	'desative com /'||(e->'tags'->>0)||'\_0'
 );
 END;$$;
 
