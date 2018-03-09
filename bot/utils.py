@@ -1,5 +1,12 @@
 #
-import psycopg2,psycopg2.extras,json, os,datetime,urllib.request
+import psycopg2,psycopg2.extras,json,time,code, os,datetime,urllib.request
+
+ifilter = {}
+with psycopg2.connect(os.environ['DB']) as con:
+	c = con.cursor()
+	c.execute('SELECT * FROM filter')
+	for r in c:
+		ifilter[r[0]]=r[1]
 
 def get_timestamp(hour,minute,second,microsecond=0):
 	t = datetime.datetime.now().replace(**locals())
@@ -7,15 +14,32 @@ def get_timestamp(hour,minute,second,microsecond=0):
 		return int(t.timestamp()+86400)
 	return int(t.timestamp())
 
-def save_event(e):
-	for k in ['end','latitude','longitude']:
+def save_event(e,s=True):	
+	e['disappear_time'] = e.get('disappear_time') or e.get('raid_end') or get_timestamp(int(e['hour']),int(e['minute']),int(e['second']))
+	for k in ['disappear_time','latitude','longitude']:
 		e[k]=round(float(e[k]),6)
-	e['id']="{end:.0f}:{latitude:.6f}:{longitude:.6f}:{tags[0]}".format(**e)
-	with psycopg2.connect(os.environ['DB']) as con:
-		con.cursor().execute('''INSERT INTO events VALUES (%s, %s) ON CONFLICT(id) DO UPDATE SET evt = events.evt || excluded.evt''',(e['id'],json.dumps(e)))
+	e['disappear_time'] = e['disappear_time']/1000 if e['disappear_time'] > 1520000000000 else e['disappear_time']	
+	if e['disappear_time'] < time.time(): # Já era
+		return
+
+	if not 'tags' in e:
+		e['tags'] = [e['pokemon_name'] if 'pokemon_name' in e else ( e['raid_pokemon_name'].upper() if e['raid_pokemon_name'] else 'LEVEL'+str(e['raid_level']))]
+
+	if e.get('individual_attack') in e: # Calcula iv
+		e['iv'] = round((e['individual_attack']+e['individual_defense']+e['individual_stamina'])*100.0/45.0,1)
+	
+	e['id']="{disappear_time:.0f}:{latitude:.6f}:{longitude:.6f}:{tags[0]}".format(**e)
+	if float(e.get('iv',30)) < ifilter.get(e['tags'][0],80): # IV muito baixo ?
+		return	
+	if s:
+		with psycopg2.connect(os.environ['DB']) as con:
+			con.cursor().execute('''INSERT INTO events VALUES (%s, %s) ON CONFLICT(id) DO UPDATE SET evt = events.evt || excluded.evt''',(e['id'],json.dumps(e)))
+	print(e['id'])
 
 def load_user(u):
-	u.update({"filter":{'':2000}})
+	if not isinstance(u,dict):
+		u = u.to_dict()
+	u.update({"filter":{'Padrão':2000},'ifilter':{'Padrão':80}})
 	with psycopg2.connect(os.environ['DB']) as con:
 		c = con.cursor()
 		c.execute("SELECT usr FROM users WHERE id='%s'",(u['id'],))
@@ -28,6 +52,7 @@ def save_user(u):
 	with psycopg2.connect(os.environ['DB']) as con:
 		c = con.cursor()
 		c.execute('''INSERT INTO users VALUES (%s, %s) ON CONFLICT(id) DO UPDATE SET usr = excluded.usr''', (u['id'],json.dumps(u)))
+	return load_user(u)
 
 def save_msg(r):
 	with psycopg2.connect(os.environ['DB']) as con:

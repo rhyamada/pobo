@@ -8,5 +8,5 @@ RUN git clone --recursive https://github.com/vysheng/tg.git
 WORKDIR /tg
 RUN ./configure && make
 ADD *.lua /
-CMD ["bin/telegram-cli","-s","/bot.lua"]
+CMD ["bin/telegram-cli","-C","-s","/bot.lua"]
 
