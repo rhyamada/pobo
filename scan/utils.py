@@ -1,12 +1,13 @@
 #
 import psycopg2,psycopg2.extras,json,time,code, os,datetime,urllib.request
-
+limits = [-24.0,-47.0,-23.0,-46.0]
 ifilter = {}
 with psycopg2.connect(os.environ['DB']) as con:
 	c = con.cursor()
 	c.execute('SELECT * FROM filter')
 	for r in c:
 		ifilter[r[0]]=r[1]
+
 
 def get_timestamp(hour,minute,second,microsecond=0):
 	t = datetime.datetime.now().replace(**locals())
@@ -18,28 +19,45 @@ def save_event(e,s=True):
 	e['disappear_time'] = e.get('disappear_time') or e.get('raid_end') or get_timestamp(int(e['hour']),int(e['minute']),int(e['second']))
 	for k in ['disappear_time','latitude','longitude']:
 		e[k]=round(float(e[k]),6)
+	if (e['latitude']<limits[0]) or (e['latitude']>limits[2]) or (e['longitude']<limits[1]) or (e['longitude']>limits[3]):
+		return None
+
 	e['disappear_time'] = e['disappear_time']/1000 if e['disappear_time'] > 1520000000000 else e['disappear_time']	
 	if e['disappear_time'] < time.time(): # Já era
-		return
+		return None
 
 	if not 'tags' in e:
 		e['tags'] = [e['pokemon_name'] if 'pokemon_name' in e else ( e['raid_pokemon_name'].upper() if e['raid_pokemon_name'] else 'LEVEL'+str(e['raid_level']))]
 
 	if e.get('individual_attack') in e: # Calcula iv
-		e['iv'] = round((e['individual_attack']+e['individual_defense']+e['individual_stamina'])*100.0/45.0,1)
+		e['iv'] = round((e['individual_attack']+e['individual_defense']+e['individual_stamina'])*100.0/45.0,0)
+		
+	if 'iv' in e:
+		e['iv']=int(e['iv'])
 	
 	e['id']="{disappear_time:.0f}:{latitude:.6f}:{longitude:.6f}:{tags[0]}".format(**e)
-	if float(e.get('iv',30)) < ifilter.get(e['tags'][0],80): # IV muito baixo ?
-		return	
+	if float(e.get('iv',50)) < ifilter.get(e['tags'][0],80): # IV muito baixo ?
+		return	None
 	if s:
 		with psycopg2.connect(os.environ['DB']) as con:
 			con.cursor().execute('''INSERT INTO events VALUES (%s, %s) ON CONFLICT(id) DO UPDATE SET evt = events.evt || excluded.evt''',(e['id'],json.dumps(e)))
 	print(e['id'])
+	return e['id']
 
 def load_user(u):
 	if not isinstance(u,dict):
 		u = u.to_dict()
-	u.update({"filter":{'Padrão':2000},'ifilter':{'Padrão':80}})
+	u.update({
+		"filter":{
+			'Padrao':'2000',
+			'Feebas':'20000',
+			'Unown':'40000'
+		},
+		'ifilter':{
+			'Padrao':'90',
+			'Feebas':'0',
+			'Unown':'0'
+		}})
 	with psycopg2.connect(os.environ['DB']) as con:
 		c = con.cursor()
 		c.execute("SELECT usr FROM users WHERE id='%s'",(u['id'],))
@@ -49,6 +67,11 @@ def load_user(u):
 	return u
 
 def save_user(u):
+	if not 'Padrao' in u['filter']:
+		u['filter']['Padrao']='2000'
+	if not 'Padrao' in u['ifilter']:
+		u['ifilter']['Padrao']='90'
+		
 	with psycopg2.connect(os.environ['DB']) as con:
 		c = con.cursor()
 		c.execute('''INSERT INTO users VALUES (%s, %s) ON CONFLICT(id) DO UPDATE SET usr = excluded.usr''', (u['id'],json.dumps(u)))
@@ -71,7 +94,7 @@ def read_events():
 def read_raw_events():
 	with psycopg2.connect(os.environ['DB']) as con:
 		c = con.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
-		c.execute('SELECT ctid, evt FROM raw')
+		c.execute('SELECT ctid, evt FROM raw') # is FOR UPDATE needed
 		for r in c:
 			yield r
 
@@ -108,3 +131,18 @@ def close_raw_event(e):
 	with psycopg2.connect(os.environ['DB']) as con:
 		c = con.cursor()
 		c.execute('DELETE FROM raw WHERE ctid=%s',(e['ctid'],))
+
+def nsect(cs,n):
+	def bisect(c,d=0):
+		p , q = c[:], c[:]
+		q[d] = p[2+d] = c[2+d]-(c[2+d] - c[0+d])/2
+		return [ p, q ]
+	while True:
+		r = []
+		n -= 1
+		for c in cs:
+			r += bisect(c,n%2)
+		if n < 1:
+			break
+		cs = r
+	return r

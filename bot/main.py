@@ -17,11 +17,37 @@ def r(v):
 with open('/root/.telegram-cli/id') as f:
 	myid = int(f.readline())
 
+def help(evt,b):
+	if evt.message and evt.message.text:
+		if evt.message.text == '/sair':
+			u = utils.load_user(e.message.from_user)
+			if 'latitude' in u:
+				del u['latitude']
+				utils.save_user(u)
+			evt.message.reply_text(text='Bye bye')
+		else:
+			evt.message.reply_text(text='''Esse bot aceita os seguintes comandos
+1) Envie sua localização
+2) Digite um numero como 2000 ou /2000
+3) Digite /filtro
+4) /<nome de pokemon>_set
+5) /sair
+''')
+		return True
+	return False
+
+def menu(evt,b):
+	if evt.message and evt.message.text and evt.message.text in ['/m','/_m','/filtro','/filtros','/filter','/filters']:
+		u = utils.load_user(evt.message.from_user)
+		evt.message.reply_text(text='Filtros definidos:\n'+'\n'.join(['/'+i+'_set /'+i+'_reset' for i in u['filter'].keys()]))
+		return True
+	return False
+		
+	
 def filter(evt,b):
 	if evt.message and evt.message.text:
 		t,m = evt.message.text,evt.message
 	elif evt.callback_query and evt.callback_query.data:
-		code.interact(local=dict(locals(),**globals()))
 		t,m = evt.callback_query.data,evt.callback_query
 	else:
 		return None
@@ -29,31 +55,48 @@ def filter(evt,b):
 	c = re.compile('^/([^_]*)_([0-9]+)?%$').match(t)
 	if c:
 		p, i = c.groups()
-		u['ifilter'][p] = i
+		if i is None:
+			u['ifilter'].pop(p,None)
+		else:
+			u['ifilter'][p] = i
 	else:
-		c = re.compile('^/([^_]*)_([0-9]+)?$').match('/Padrão_'+t if re.compile('^[0-9]+$').match(t) else t)
-		if not c:
-			return None
-		p, d = c.groups()
-		u['filter'][p] = d
-
+		c = re.compile('^/([^_]*)_([0-9]+)?$').match('/Padrao_'+t if re.compile('^[0-9]+$').match(t) else t)
+		if c:
+			p, d = c.groups()
+			if (d is None) and (p in u['filter']):
+				u['filter'].pop(p,None)
+			else:
+				u['filter'][p] = d
+		else:
+			c = re.compile('^/([^_]+)_(m|set|reset)$').match(t)
+			if c:
+				p = c.group(1)
+				if c.group(2)=='reset':
+					if p=='Padrao':
+						u['filter'][p]='2000'
+						u['ifilter'][p]='90'
+					else:
+						u['filter'].pop(p,None)
+						u['ifilter'].pop(p,None)
+			else:
+				return None
 	d,i = u['filter'].get(p),u['ifilter'].get(p)
 	k = [[]]
 	if d == '0':
-		t, d = '%s:\nalerta desativado' % (p,),u['filter']['Padrão']
+		t, d = '%s:\nalerta desativado' % (p,),u['filter']['Padrao']
 		k[0].append(IB("Ativar", callback_data='/%s_' % (p,)))
 	else:
 		if d is None:
-			d = u['filter']['Padrão']
+			d = u['filter']['Padrao']
 			t = '%s:\ndistância padrão: %sm' % (p,d)
 		else:
 			t = '%s:\ndistancia máxima: %sm' % (p,d)
-			k[0].append(IB("Padrão", callback_data='/%s_' % (p,)))
-		if p != 'Padrão':
+			k[0].append(IB("Padrao", callback_data='/%s_' % (p,)))
+		if p != 'Padrao':
 			k[0].append(IB("Desativar", callback_data='/%s_0' % (p,)))
 		k.append([])
 		if i is None:
-			t += '\nIV minimo padrão: %s%%' % (u['ifilter'].get('Padrão','90'),)
+			t += '\nIV minimo padrão: %s%%' % (u['ifilter'].get('Padrao','90'),)
 		else:
 			t += '\nIV mínimo custom: %s%%' % (i,)
 			k[1].append(IB("Padrão", callback_data='/%s_%%' % (p,)))
@@ -76,6 +119,7 @@ def filter(evt,b):
 		try:
 			if 'filter_msg' in u: # clear button of old msg
 				b.edit_message_reply_markup(chat_id=u['filter_msg']['chat']['id'],message_id=u['filter_msg']['message_id'])
+				del u['filter_msg']
 		except:
 			pass
 		u['filter_msg']=m.reply_text(text=t,reply_markup=InlineKeyboardMarkup(k)).to_dict()
@@ -112,10 +156,12 @@ while True:
 			print(e.to_dict())
 			if location(e):
 				print('Location updated')
+			elif menu(e,b):
+				print('Menu')
 			elif filter(e,b):
 				print('Filter updated')
-			elif e.message and e.message.text:
-				e.message.reply_text('Envie sua localização e uma distancia')
+			elif help(e,b):
+				print('ajuda')
 			o = e.update_id + 1
 		for e in utils.read_events():
 			on_event(e)

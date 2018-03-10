@@ -7,6 +7,7 @@ pats = [
 
 while True:
 	for e in utils.read_raw_events():
+		print(e)
 		if 'text' in e['evt']:
 			t = e['evt']['text']
 			evt = {'btg':e['evt']}
@@ -17,7 +18,7 @@ while True:
 				elif c:
 					break
 			else:
-				if ('pokemon_name' in evt) or ('raid' in evt):
+				if ('pokemon_name' in evt) or ('raid_pokemon_name' in evt):
 					utils.save_event(evt)
 				else:
 					print('failed msg'+t)

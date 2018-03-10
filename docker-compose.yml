@@ -15,8 +15,8 @@ services:
       - telegram_cli:/root/.telegram-cli:ro
     logging:
       options:
-        max-size: 10m
-    #restart: unless-stopped
+        max-size: 128k
+    restart: unless-stopped
   scan:
     build: 
       context: scan
@@ -27,11 +27,13 @@ services:
       - postgres
     env_file:
       - .env
+    volumes:
+      - ./scan/:/scan/
     #command: ["python3"]
     logging:
       options:
-        max-size: 10m
-    #restart: unless-stopped
+        max-size: 128k
+    restart: unless-stopped
   digest:
     build: 
       context: digest
@@ -44,7 +46,7 @@ services:
       - .env
     logging:
       options:
-        max-size: 10m
+        max-size: 128k
     restart: unless-stopped
   discord:
     build: 
@@ -60,7 +62,7 @@ services:
       - .env
     logging:
       options:
-        max-size: 10m
+        max-size: 128k
     restart: unless-stopped
   telegram:
     build: 
@@ -76,7 +78,7 @@ services:
     restart: unless-stopped
     logging:
       options:
-        max-size: 10m
+        max-size: 128k
     volumes:
       - telegram_cli:/root/.telegram-cli
   postgres:
@@ -91,7 +93,7 @@ services:
       - .env
     logging:
       options:
-        max-size: 10m
+        max-size: 128k
 volumes:
   postgres: {}
   telegram_cli: {}
