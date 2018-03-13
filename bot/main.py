@@ -1,18 +1,20 @@
 from telegram import ReplyKeyboardRemove,ReplyKeyboardMarkup,KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton as IB
 import telegram, math, time, os, code, re, json, psycopg2,utils
 
-print('starting')
+from math import log10
 
-def r(v):
-	v = float(v)
-	l = math.log10(v)
-	e = math.floor(l)
-	l -= e
-	if l > math.log10(4.99):
-		return str(5 * (10**e))
-	if l > math.log10(1.99):
-		return str(2 * (10**e))
-	return str(10**e)
+print('starting')
+F = [0.75, 1.0, 1.5, 2.0, 3.0, 5.0, 7.5, 10.0]
+def inc(v):
+	e, f = divmod(log10(float(v)*1.02), 1)
+	for i in range(len(F)):
+		if f < log10(F[i]):
+			return str(int(F[i]*(10.0**e)))
+def dec(v):
+	e, f = divmod(log10(float(v)*0.98), 1)
+	for i in range(len(F)-1,0,-1):
+		if f > log10(F[i]):
+			return str(int(F[i]*(10.0**e)))
 
 with open('/root/.telegram-cli/id') as f:
 	myid = int(f.readline())
@@ -26,20 +28,30 @@ def help(evt,b):
 				utils.save_user(u)
 			evt.message.reply_text(text='Bye bye')
 		else:
-			evt.message.reply_text(text='''Esse bot aceita os seguintes comandos
-1) Envie sua localização
-2) Digite um numero como 2000 ou /2000
-3) Digite /filtro
-4) /<nome de pokemon>_set
-5) /sair
-''')
+			evt.message.reply_text(text='''Esse bot aceita os seguintes exemplos de comandos:
+- Enviar sua localização
+- Compartilhar sua localização
+- <pre>2000</pre> 
+- /2000
+- <pre>90%</pre>
+- /filtro
+- /Aron_set
+- /sair
+''',parse_mode='html')
 		return True
 	return False
 
 def menu(evt,b):
 	if evt.message and evt.message.text and evt.message.text in ['/m','/_m','/filtro','/filtros','/filter','/filters']:
 		u = utils.load_user(evt.message.from_user)
-		evt.message.reply_text(text='Filtros definidos:\n'+'\n'.join(['/'+i+'_set /'+i+'_reset' for i in u['filter'].keys()]))
+		t = 'Filtros definidos:'
+		for p in sorted({'Padrao','Ultra','Rare','EXGYM','LEVEL1','LEVEL2','LEVEL3','LEVEL4','LEVEL5'}.union(u['filter'].keys()).union(u['ifilter'].keys())):
+			t += '\n/'+p+'_set '
+			if p in u['filter']:
+				t += str(u['filter'][p])+'m '
+			if p in u['ifilter']:
+				t += str(u['ifilter'][p])+'%'
+		evt.message.reply_text(text=t)
 		return True
 	return False
 		
@@ -52,7 +64,7 @@ def filter(evt,b):
 	else:
 		return None
 	u = utils.load_user(m.from_user.to_dict())
-	c = re.compile('^/([^_]*)_([0-9]+)?%$').match(t)
+	c = re.compile('^/([^_]*)_([0-9]+)?%$').match('/Padrao_'+t if re.compile('^[0-9]+%$').match(t) else t)
 	if c:
 		p, i = c.groups()
 		if i is None:
@@ -95,17 +107,18 @@ def filter(evt,b):
 		if p != 'Padrao':
 			k[0].append(IB("Desativar", callback_data='/%s_0' % (p,)))
 		k.append([])
-		if i is None:
-			t += '\nIV minimo padrão: %s%%' % (u['ifilter'].get('Padrao','90'),)
-		else:
-			t += '\nIV mínimo custom: %s%%' % (i,)
-			k[1].append(IB("Padrão", callback_data='/%s_%%' % (p,)))
-		for j in ['0','80','90','95','97','100']:
-			if j != i:
-				k[1].append(IB("%s%%"%(j,), callback_data='/%s_%s%%' % (p,j)))
+		if p != p.upper():
+			if i is None:
+				t += '\nIV minimo padrão: %s%%' % (u['ifilter'].get('Padrao','90'),)
+			else:
+				t += '\nIV mínimo custom: %s%%' % (i,)
+				k[1].append(IB("Padrão", callback_data='/%s_%%' % (p,)))
+			for j in ['0','80','90','95','97','100']:
+				if j != i:
+					k[1].append(IB("%s%%"%(j,), callback_data='/%s_%s%%' % (p,j)))
 		
 	d = max(50,float(d))
-	d1, d2 = r(d*0.9), r(d*3.9)
+	d1, d2 = dec(d), inc(d)
 	k[0].append(IB(d1+"m", callback_data='/%s_%s' % (p,d1)))
 	k[0].append(IB(d2+"m", callback_data='/%s_%s' % (p,d2)))
 
